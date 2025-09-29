@@ -1,80 +1,57 @@
 "use client";
 
-import { Canvas, useFrame, extend } from "@react-three/fiber";
-import { OrbitControls, Stars, shaderMaterial } from "@react-three/drei";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { OrbitControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
 import { useMemo, useRef } from "react";
 
-// TypeScript declarations for extended materials
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      nebulaMaterial: any;
-    }
-  }
-}
-
-// Nebula shader material for swirling clouds
-const NebulaMaterial = shaderMaterial(
-  { 
-    time: 0, 
-    color1: new THREE.Color("#351b5a"), // Deep purple
-    color2: new THREE.Color("#dc5692")  // Pink
-  },
-  // Vertex shader
-  `varying vec2 vUv;
-   void main() {
-     vUv = uv;
-     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-   }`,
-  // Fragment shader with noise for nebula effect
-  `varying vec2 vUv;
-   uniform float time;
-   uniform vec3 color1;
-   uniform vec3 color2;
-   
-   float random(vec2 st) {
-     return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
-   }
-   
-   float noise(vec2 st) {
-     vec2 i = floor(st);
-     vec2 f = fract(st);
-     float a = random(i);
-     float b = random(i + vec2(1.0, 0.0));
-     float c = random(i + vec2(0.0, 1.0));
-     float d = random(i + vec2(1.0, 1.0));
-     vec2 u = f * f * (3.0 - 2.0 * f);
-     return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-   }
-   
-   void main() {
-     vec2 st = vUv * 3.0 + time * 0.1;
-     float n1 = noise(st);
-     float n2 = noise(st * 2.0 + time * 0.05);
-     float n = mix(n1, n2, 0.5);
-     
-     vec3 color = mix(color1, color2, n);
-     gl_FragColor = vec4(color, 0.8);
-   }`
-);
-
-extend({ NebulaMaterial });
-
-// Animated nebula background
+// Simple animated nebula background without custom shaders
 function Nebula() {
-  const ref = useRef<any>();
+  const meshRef = useRef<THREE.Mesh>(null!);
   
   useFrame(({ clock }) => {
-    if (ref.current) {
-      ref.current.time = clock.getElapsedTime();
+    if (meshRef.current && meshRef.current.material) {
+      meshRef.current.rotation.z = clock.getElapsedTime() * 0.1;
+      // Type assertion for material opacity
+      const material = meshRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = 0.3 + Math.sin(clock.getElapsedTime()) * 0.1;
     }
   });
   
   return (
-    <mesh scale={[100, 100, 1]} position={[0, 0, -50]}>
+    <mesh ref={meshRef} scale={[100, 100, 1]} position={[0, 0, -50]}>
       <planeGeometry args={[2, 2]} />
-      <nebulaMaterial ref={ref} transparent />
+      <meshBasicMaterial 
+        color="#351b5a" 
+        transparent 
+        opacity={0.3}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
+// Additional nebula layers for depth
+function NebulaLayer({ color, scale, speed }: { color: string; scale: number; speed: number }) {
+  const meshRef = useRef<THREE.Mesh>(null!);
+  
+  useFrame(({ clock }) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.z = clock.getElapsedTime() * speed;
+      meshRef.current.position.x = Math.sin(clock.getElapsedTime() * speed * 0.5) * 2;
+      meshRef.current.position.y = Math.cos(clock.getElapsedTime() * speed * 0.3) * 2;
+    }
+  });
+  
+  return (
+    <mesh ref={meshRef} scale={[scale, scale, 1]} position={[0, 0, -45]}>
+      <planeGeometry args={[3, 3]} />
+      <meshBasicMaterial 
+        color={color} 
+        transparent 
+        opacity={0.2}
+        side={THREE.DoubleSide}
+      />
     </mesh>
   );
 }
@@ -152,7 +129,7 @@ function FloatingLetter({
   
   return (
     <mesh ref={meshRef} position={position}>
-      <boxGeometry args={[1, 1, 0.2]} />
+      <sphereGeometry args={[0.5, 8, 8]} />
       <meshStandardMaterial 
         color={letter === "♫" || letter === "𝄞" ? "#E45A92" : "#FFACAC"} 
         emissive={letter === "♫" || letter === "𝄞" ? "#E45A92" : "#FFACAC"}
@@ -160,11 +137,6 @@ function FloatingLetter({
         metalness={0.8}
         roughness={0.2}
       />
-      {/* Text overlay */}
-      <mesh position={[0, 0, 0.1]}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial transparent opacity={0} />
-      </mesh>
     </mesh>
   );
 }
@@ -185,6 +157,8 @@ export default function MusicGalaxyBackground() {
         
         {/* 3D Elements */}
         <Nebula />
+        <NebulaLayer color="#dc5692" scale={80} speed={0.02} />
+        <NebulaLayer color="#351b5a" scale={60} speed={-0.015} />
         <FloatingLetters />
         
         {/* Galaxy stars */}
